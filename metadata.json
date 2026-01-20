@@ -1,0 +1,7 @@
+{
+  "name": "FocusFlow AI Todo",
+  "description": "A sophisticated task management application powered by Supabase for real-time data and Gemini AI for smart task breakdown and productivity insights.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
