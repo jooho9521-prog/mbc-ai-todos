@@ -9,13 +9,13 @@ const getAiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY || '' })
 
 /**
  * AI 하루 일과표(Timetable) 생성 서비스
- * 모델: gemini-3-flash-preview (구조화된 데이터 생성에 최적화)
+ * 모델: gemini-3-pro-preview (더 정밀한 스케줄링을 위해 Pro 모델 사용)
  */
 export const getDayPlanner = async (theme: string) => {
   try {
     const ai = getAiClient();
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: `당신은 세계 최고의 시간 관리 전문가입니다. 
 다음 테마와 목표에 가장 적합한 효율적인 하루 타임테이블을 한국어로 작성해 주세요. 
 오전 09:00 시작을 기준으로 하며, 작업 사이의 적절한 휴식과 집중 시간을 고려하십시오.
@@ -41,19 +41,24 @@ export const getDayPlanner = async (theme: string) => {
     });
 
     const text = response.text;
-    if (!text) throw new Error("AI 응답이 비어 있습니다.");
+    if (!text) {
+      throw new Error("AI 응답이 생성되지 않았습니다 (Safety filter 등에 의해 차단되었을 수 있습니다).");
+    }
     
-    const data = JSON.parse(text);
+    // 마크다운 코드 블록 제거 및 순수 JSON 추출
+    const cleanJson = text.replace(/```json|```/g, "").trim();
+    const data = JSON.parse(cleanJson);
+    
     return data as { time: string, task: string }[];
   } catch (error) {
-    console.error("Gemini planner error:", error);
-    throw error; // App.tsx에서 에러 처리를 위해 throw
+    console.error("Gemini planner service error:", error);
+    throw error; 
   }
 };
 
 /**
  * 심층 생산성 코칭 서비스
- * 모델: gemini-3-pro-preview (복잡한 추론 및 분석에 최적화)
+ * 모델: gemini-3-pro-preview
  */
 export const getPriorityAdvice = async (todos: string[]) => {
   try {
