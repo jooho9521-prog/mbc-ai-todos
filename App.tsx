@@ -46,7 +46,7 @@ const App: React.FC = () => {
       setNewTodoTitle('');
       fetchTodos();
     } catch (error) {
-      alert('할일을 추가하는 도중 오류가 발생했습니다. 데이터베이스 연결을 확인해주세요.');
+      alert('할일을 추가하는 도중 오류가 발생했습니다.');
     }
   };
 
@@ -75,22 +75,18 @@ const App: React.FC = () => {
 
   const handleDayPlanner = async () => {
     if (!newTodoTitle.trim()) {
-      alert('오늘의 테마나 주요 목표를 입력해주세요! AI가 하루 일과표를 짜드립니다.');
+      alert('오늘의 테마나 주요 목표를 먼저 입력해주세요!');
       return;
     }
 
     setIsPlanning(true);
     try {
-      // 1. AI 일과표 생성 단계
       const schedule = await getDayPlanner(newTodoTitle);
       
       if (!schedule || schedule.length === 0) {
-        alert('AI가 일과를 생성하지 못했습니다. 테마를 조금 더 구체적으로 입력해보세요.');
-        setIsPlanning(false);
-        return;
+        throw new Error("Empty schedule returned");
       }
 
-      // 2. 데이터베이스 저장 단계
       const inserts = schedule.map(item => ({
         title: `[${item.time}] ${item.task}`,
         priority: 'medium' as Priority,
@@ -100,15 +96,15 @@ const App: React.FC = () => {
       const { error: insertError } = await supabase.from('todos').insert(inserts);
       
       if (insertError) {
-        console.error('Supabase Insert Error:', insertError);
-        alert('일과표는 생성되었으나 저장하는 도중 오류가 발생했습니다.');
+        throw new Error(`DB 저장 실패: ${insertError.message}`);
       } else {
         setNewTodoTitle('');
         await fetchTodos();
       }
-    } catch (error) {
-      console.error('Day Planner Total Error:', error);
-      alert('AI 서버와의 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    } catch (error: any) {
+      console.error('Day Planner Flow Error:', error);
+      const message = error.message || "알 수 없는 오류";
+      alert(`일과표 생성 실패: ${message}\n잠시 후 다시 시도해주세요.`);
     } finally {
       setIsPlanning(false);
     }
