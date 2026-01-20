@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './lib/supabase';
 import { Todo, Priority } from './types';
-import { getSmartBreakdown, getPriorityAdvice } from './services/geminiService';
+import { getDayPlanner, getPriorityAdvice } from './services/geminiService';
 import TodoItem from './components/TodoItem';
 
 const App: React.FC = () => {
@@ -10,7 +10,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [newTodoTitle, setNewTodoTitle] = useState('');
   const [aiAdvice, setAiAdvice] = useState<string | null>(null);
-  const [isBreakingDown, setIsBreakingDown] = useState(false);
+  const [isPlanning, setIsPlanning] = useState(false);
   const [isGettingAdvice, setIsGettingAdvice] = useState(false);
 
   const fetchTodos = useCallback(async () => {
@@ -73,31 +73,38 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSmartBreakdown = async () => {
+  const handleDayPlanner = async () => {
     if (!newTodoTitle.trim()) {
-      alert('목표를 먼저 입력해주세요! AI가 단계를 나누어 드립니다.');
+      alert('오늘의 테마나 주요 목표를 입력해주세요! AI가 하루 일과표를 짜드립니다.');
       return;
     }
 
-    setIsBreakingDown(true);
-    const subtasks = await getSmartBreakdown(newTodoTitle);
-    
-    if (subtasks.length > 0) {
-      try {
-        const inserts = subtasks.map(task => ({
-          title: task,
+    setIsPlanning(true);
+    try {
+      const schedule = await getDayPlanner(newTodoTitle);
+      
+      if (schedule && schedule.length > 0) {
+        const inserts = schedule.map(item => ({
+          title: `[${item.time}] ${item.task}`,
           priority: 'medium' as Priority,
-          category: 'AI Breakdown'
-        }));
-        const { error } = await supabase.from('todos').insert(inserts);
-        if (error) throw error;
+          category: 'AI Timetable'
+        })).reverse();
+
+        const { error: insertError } = await supabase.from('todos').insert(inserts);
+        
+        if (insertError) throw insertError;
+        
         setNewTodoTitle('');
-        fetchTodos();
-      } catch (error) {
-        console.error('Error adding AI tasks:', error);
+        await fetchTodos();
+      } else {
+        alert('AI가 일과표를 생성하지 못했습니다. 다시 시도해 주세요.');
       }
+    } catch (error) {
+      console.error('Day Planner Flow Error:', error);
+      alert('일과표를 생성하거나 저장하는 도중 오류가 발생했습니다.');
+    } finally {
+      setIsPlanning(false);
     }
-    setIsBreakingDown(false);
   };
 
   const handleGetAdvice = async () => {
@@ -108,9 +115,14 @@ const App: React.FC = () => {
     }
     
     setIsGettingAdvice(true);
-    const advice = await getPriorityAdvice(activeTasks);
-    setAiAdvice(advice || "집중해서 하나씩 해결해 보세요!");
-    setIsGettingAdvice(false);
+    try {
+      const advice = await getPriorityAdvice(activeTasks);
+      setAiAdvice(advice || "집중해서 하나씩 해결해 보세요!");
+    } catch (error) {
+      setAiAdvice("컨설팅을 불러오지 못했습니다.");
+    } finally {
+      setIsGettingAdvice(false);
+    }
   };
 
   const completedCount = todos.filter(t => t.is_completed).length;
@@ -123,11 +135,11 @@ const App: React.FC = () => {
         <div>
           <h1 className="text-4xl font-extrabold text-slate-900 flex items-center justify-center md:justify-start gap-3 mb-2">
             <span className="bg-indigo-600 text-white p-2 rounded-2xl shadow-lg shadow-indigo-200">
-              <i className="fas fa-check-double scale-75"></i>
+              <i className="fas fa-calendar-check scale-75"></i>
             </span>
             FocusFlow
           </h1>
-          <p className="text-slate-500 font-medium">Smart AI Task Management</p>
+          <p className="text-slate-500 font-medium">Professional AI Time Planner</p>
         </div>
         <div className="mt-6 md:mt-0">
           <button 
@@ -140,7 +152,7 @@ const App: React.FC = () => {
             ) : (
               <i className="fas fa-wand-magic-sparkles"></i>
             )}
-            AI 코칭 받기
+            프로 컨설팅 받기
           </button>
         </div>
       </header>
@@ -170,24 +182,26 @@ const App: React.FC = () => {
 
       {/* AI Advice Box */}
       {aiAdvice && (
-        <div className="mb-10 p-6 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-[1.5rem] relative overflow-hidden animate-fade-in group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <i className="fas fa-quote-right text-4xl text-indigo-600"></i>
+        <div className="mb-10 p-6 bg-gradient-to-br from-slate-900 to-indigo-950 border border-slate-800 rounded-[1.5rem] relative overflow-hidden animate-fade-in group shadow-2xl">
+          <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+            <i className="fas fa-brain text-6xl text-white"></i>
           </div>
-          <div className="flex items-start gap-4">
-            <div className="bg-indigo-600 text-white w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-200">
-              <i className="fas fa-brain"></i>
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-indigo-500 text-white w-8 h-8 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                <i className="fas fa-sparkles text-xs"></i>
+              </div>
+              <h4 className="text-xs font-black text-indigo-300 uppercase tracking-widest">Executive Productivity Coaching</h4>
+              <button 
+                onClick={() => setAiAdvice(null)} 
+                className="ml-auto text-slate-500 hover:text-white transition-colors"
+              >
+                <i className="fas fa-times"></i>
+              </button>
             </div>
-            <div className="pr-6">
-              <h4 className="text-sm font-bold text-indigo-900 mb-1">Gemini의 생산성 가이드</h4>
-              <p className="text-slate-700 leading-relaxed font-medium">{aiAdvice}</p>
+            <div className="text-slate-200 leading-relaxed font-medium text-sm whitespace-pre-wrap">
+              {aiAdvice}
             </div>
-            <button 
-              onClick={() => setAiAdvice(null)} 
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              <i className="fas fa-times"></i>
-            </button>
           </div>
         </div>
       )}
@@ -200,36 +214,30 @@ const App: React.FC = () => {
               type="text"
               value={newTodoTitle}
               onChange={(e) => setNewTodoTitle(e.target.value)}
-              placeholder="무엇을 이루고 싶나요? 목표를 입력하세요..."
-              className="w-full pl-6 pr-14 py-5 bg-white border-2 border-slate-100 rounded-3xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all text-slate-800 text-lg shadow-sm placeholder:text-slate-400"
+              placeholder="오늘의 테마나 목표를 입력하세요 (예: 자격증 공부 집중하는 날)"
+              className="w-full px-6 py-5 bg-white border-2 border-slate-100 rounded-3xl focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all text-slate-800 text-lg shadow-sm placeholder:text-slate-400"
             />
-            <button 
-              type="submit"
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-slate-900 text-white rounded-2xl flex items-center justify-center hover:bg-black transition-colors shadow-lg active:scale-95"
-            >
-              <i className="fas fa-plus"></i>
-            </button>
           </div>
           <div className="flex justify-between items-center px-2">
              <button 
               type="button"
-              onClick={handleSmartBreakdown}
-              disabled={isBreakingDown}
-              className={`group text-sm font-bold flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all ${isBreakingDown ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-md hover:shadow-lg active:scale-95'}`}
+              onClick={handleDayPlanner}
+              disabled={isPlanning}
+              className={`group text-sm font-bold flex items-center gap-2 px-6 py-3 rounded-2xl transition-all ${isPlanning ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200 active:scale-95'}`}
             >
-              {isBreakingDown ? (
+              {isPlanning ? (
                 <>
-                  <i className="fas fa-spinner animate-spin"></i>
-                  분석 중...
+                  <i className="fas fa-circle-notch animate-spin"></i>
+                  스케줄 설계 중...
                 </>
               ) : (
                 <>
-                  <i className="fas fa-sitemap text-indigo-400 group-hover:scale-110 transition-transform"></i>
-                  AI로 단계 나누기
+                  <i className="fas fa-clock group-hover:rotate-12 transition-transform"></i>
+                  AI 하루 일과표 생성
                 </>
               )}
             </button>
-            <p className="text-[11px] text-slate-400 font-medium">단축키: Enter로 즉시 추가</p>
+            <p className="text-[11px] text-slate-400 font-medium tracking-tight">Time is your most valuable asset.</p>
           </div>
         </form>
       </section>
@@ -239,21 +247,21 @@ const App: React.FC = () => {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 opacity-40">
             <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="mt-4 font-bold text-slate-600">Supabase 연결 중...</p>
+            <p className="mt-4 font-bold text-slate-600">스케줄 로딩 중...</p>
           </div>
         ) : todos.length === 0 ? (
           <div className="text-center py-20 bg-white border-4 border-dashed border-slate-50 rounded-[2.5rem] group hover:border-indigo-50 transition-colors">
             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:bg-indigo-50 transition-colors">
-              <i className="fas fa-feather-pointed text-3xl text-slate-200 group-hover:text-indigo-200 transition-colors"></i>
+              <i className="fas fa-hourglass-start text-3xl text-slate-200 group-hover:text-indigo-200 transition-colors"></i>
             </div>
-            <h3 className="text-slate-800 font-bold text-xl mb-2">오늘의 여정을 시작하세요</h3>
-            <p className="text-slate-400 font-medium px-10">첫 번째 할 일을 입력하거나 AI 브레이크다운 기능을 사용해보세요.</p>
+            <h3 className="text-slate-800 font-bold text-xl mb-2">시간표가 비어 있습니다</h3>
+            <p className="text-slate-400 font-medium px-10">오늘의 테마를 입력하고 AI 일과표 버튼을 눌러보세요.</p>
           </div>
         ) : (
           <div className="space-y-1 animate-slide-up">
             <div className="flex items-center justify-between px-4 mb-4">
-              <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">List View</h2>
-              <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-bold">LATEST FIRST</span>
+              <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Timeline Feed</h2>
+              <span className="text-[10px] bg-indigo-50 text-indigo-500 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">Smart Sorted</span>
             </div>
             {todos.map((todo) => (
               <TodoItem 
@@ -269,8 +277,8 @@ const App: React.FC = () => {
 
       {/* Footer */}
       <footer className="mt-20 pt-10 border-t border-slate-100 text-center">
-        <p className="text-slate-300 text-[10px] font-bold tracking-widest uppercase mb-1">FocusFlow AI Productivity Suite</p>
-        <p className="text-slate-400 text-xs">&copy; 2024. Powering your focus with Supabase & Gemini.</p>
+        <p className="text-slate-300 text-[10px] font-bold tracking-widest uppercase mb-1">FocusFlow AI Timeline Edition</p>
+        <p className="text-slate-400 text-xs">&copy; 2024. Optimized Daily Experience.</p>
       </footer>
     </div>
   );
